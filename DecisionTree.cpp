@@ -22,39 +22,34 @@ const std::string &DecisionTreeNode::getAttribute() const {
     return attribute;
 }
 
-void DecisionTree::build(std::vector<std::vector<std::string>> data) {
-    std::cout << "Building decision tree..." << std::endl;
-
-    root = buildRec(std::move(data));
+void DecisionTree::build(const std::vector<std::vector<std::string>>& data) {
+    root = buildRec(data);
 }
 
 void DecisionTree::print() {
     printRec(root, 0);
 }
 
-void DecisionTree::printRec(std::shared_ptr<DecisionTreeNode> currentNode, int depth) {
-    if (currentNode == nullptr) {
+void DecisionTree::printRec(const std::shared_ptr<DecisionTreeNode>& currentNode, int depth) {
+    auto nodes = currentNode->getNextNodes();
+
+    if (nodes.empty()) { // This is a leaf node
+        std::cout << "Decision: " << currentNode->getAttribute() << std::endl;
         return;
     }
 
-    auto nodes = currentNode->getNextNodes();
-
-    for (int i = 0; i < depth; i++) {
-        std::cout << "\t";
-    }
-    std::cout << "Attribute: " << currentNode->getAttribute() << std::endl;
-
-    for (auto nextNode : nodes) {
+    std::cout << currentNode->getAttribute() << "?" << std::endl;
+    for (const auto& nextNode : nodes) {
         for (int i = 0; i < depth; i++) {
             std::cout << "\t";
         }
-        std::cout << "-> " << nextNode.first << std::endl;
+        std::cout << "-> " << nextNode.first << ": ";
 
-        printRec(nextNode.second, ++depth);
+        printRec(nextNode.second, depth + 1);
     }
 }
 
-std::shared_ptr<DecisionTreeNode> DecisionTree::buildRec(std::vector<std::vector<std::string>> data) {
+std::shared_ptr<DecisionTreeNode> DecisionTree::buildRec(const std::vector<std::vector<std::string>> &data) {
     // Pure decision?
     std::string firstOutcome = data[1].back();
     bool pure = true;
@@ -67,41 +62,53 @@ std::shared_ptr<DecisionTreeNode> DecisionTree::buildRec(std::vector<std::vector
     }
 
     if (pure) {
-        // Make leaf node here
-        return nullptr;
+        // Make leaf node here (store the outcome in the attribute of the node)
+        return std::make_shared<DecisionTreeNode>(DecisionTreeNode(firstOutcome));
     }
 
     // No more attributes?
     if (data[0].size() == 1) { // Only the 'Play' column left
-        return nullptr;
+        // Check which outcome is more common
+        std::map<std::string, int> outcomes;
+
+        for (int i = 1; i < data.size(); i++) {
+            outcomes[data[i][0]] += 1;
+        }
+
+        // TODO: Hardcoded
+        if (outcomes["yes"] > outcomes["no"]) {
+            return std::make_shared<DecisionTreeNode>(DecisionTreeNode("yes"));
+        } else {
+            return std::make_shared<DecisionTreeNode>(DecisionTreeNode("no"));
+        }
     }
-
-
 
     int colNumber = data.front().size();
 
     // Check where the gain would be the highest
     double highestGain = -1000; // TODO: Initialize properly
     int colWithHighestGain = 0;
-    FrequencyTable frequencyTableWithHighestGain = FrequencyTable(data, 0, "yes"); // TODO: Ugly
+    std::unique_ptr<FrequencyTable> frequencyTableWithHighestGain;
 
     for (int col = 0; col < colNumber - 1; col++) {
-        FrequencyTable ft = FrequencyTable(data, col, "yes");
+        FrequencyTable ft = FrequencyTable(data, col, "yes"); // TODO: Hardcoded
         double gain = ft.getGain();
 
         if (gain > highestGain) {
             highestGain = gain;
             colWithHighestGain = col;
-            frequencyTableWithHighestGain = ft;
+            frequencyTableWithHighestGain = std::make_unique<FrequencyTable>(ft);
         }
     }
 
-    // Build this node using that information
-    DecisionTreeNode newNode = DecisionTreeNode(data.front()[colWithHighestGain]);
-    std::shared_ptr<DecisionTreeNode> currentNode = std::make_shared<DecisionTreeNode>(newNode);
+    // Build this node accordingly
+    std::shared_ptr<DecisionTreeNode> currentNode =
+            std::make_shared<DecisionTreeNode>(DecisionTreeNode(data.front()[colWithHighestGain]));
 
-    for (const auto &attribute : frequencyTableWithHighestGain.getAttributes()) {
-        // Delete rows with this attribute from a copy of the table
+    for (const auto &attribute : frequencyTableWithHighestGain->getAttributes()) {
+        // Delete the column we chose, and only take all entries with the current attribute
+        // for the new table
+        // TODO: Could be made more efficient by removing the column we chose before this loop
         std::vector<std::vector<std::string>> new_data;
         std::vector<std::string> firstLine = data[0];
         firstLine.erase(firstLine.begin() + colWithHighestGain);
@@ -109,6 +116,7 @@ std::shared_ptr<DecisionTreeNode> DecisionTree::buildRec(std::vector<std::vector
         new_data.push_back(firstLine);
 
         for (int i = 1; i < data.size(); i++) {
+            // If the attributes match, add this line to the new data
             if (data[i][colWithHighestGain] == attribute) {
                 std::vector<std::string> line = data[i];
                 line.erase(line.begin() + colWithHighestGain);
@@ -117,8 +125,27 @@ std::shared_ptr<DecisionTreeNode> DecisionTree::buildRec(std::vector<std::vector
             }
         }
 
-        currentNode->addNode(attribute, buildRec(new_data));
+        std::shared_ptr<DecisionTreeNode> nodeToInsert = buildRec(new_data);
+
+        // If the tree continues, stick it to this node (at this attribute)
+        if (nodeToInsert != nullptr) {
+            currentNode->addNode(attribute, nodeToInsert);
+        }
     }
 
     return currentNode;
+}
+
+std::string DecisionTree::classify(std::map<std::string, std::string> attributes) {
+    // Walk down the tree until we arrive at a leaf node
+    std::shared_ptr currentNode = root;
+    std::map<std::string, std::shared_ptr<DecisionTreeNode>> nextNodes = currentNode->getNextNodes();
+
+    do {
+        currentNode = nextNodes[attributes[currentNode->getAttribute()]];
+        nextNodes = currentNode->getNextNodes();
+    } while(!nextNodes.empty());
+
+    // Return the attribute, where leaf nodes store the classification
+    return currentNode->getAttribute();
 }

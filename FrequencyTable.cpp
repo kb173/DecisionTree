@@ -5,13 +5,23 @@
 #include <numeric>
 #include "FrequencyTable.h"
 #include "EntropyCalculator.h"
-#include<map>
+#include <map>
+#include <iostream>
 
 
 FrequencyTable::FrequencyTable(const std::vector<std::vector<std::string>> &data, int column,
                                const std::string& positiveResultName) {
 
+    bool first = true; // TODO: Ugly
+
+    // Build the frequency table by counting how many times the positive or negative result
+    // is reached for all possible attribute values
     for (const auto& line : data) {
+        if (first) {
+            first = false;
+            continue;
+        }
+
         std::string attributeVal = line[column];
         std::string resultVal = line.back();
 
