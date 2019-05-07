@@ -44,3 +44,13 @@ double FrequencyTable::getGain() {
 
     return gain;
 }
+
+std::list<std::string> FrequencyTable::getAttributes() {
+    auto attributes = std::list<std::string>();
+
+    for (const auto& attribute : attributeFrequencies) {
+        attributes.push_back(attribute.first);
+    }
+
+    return attributes;
+}

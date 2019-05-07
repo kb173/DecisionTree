@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <list>
 
 class FrequencyTable {
 public:
@@ -16,6 +17,8 @@ public:
                    const std::string& positiveResultName);
 
     double getGain();
+
+    std::list<std::string> getAttributes();
 
 private:
     // Maps attribute values to the frequencies of a positive/negative outcome
